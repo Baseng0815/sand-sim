@@ -31,6 +31,12 @@
         buildInputs = with pkgs; [
           linuxPackages.nvidiaPackages.beta
           sdl3
+          sdl3-ttf
+          harfbuzz
+          freetype
+          glib
+          libsysprof-capture
+          pcre2
           cudaPackages.cudatoolkit
           cudaPackages.cuda_cudart
           cudaPackages.cuda_cupti
