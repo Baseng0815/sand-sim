@@ -26,6 +26,7 @@
             cmake
             ninja
             pkg-config
+            cudaPackages.nsight_systems
         ];
 
         buildInputs = with pkgs; [
