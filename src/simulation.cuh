@@ -14,8 +14,12 @@ class Grid {
 	uint32_t width() const;
 	uint32_t height() const;
 
+        const uint8_t *data() const;
+
     private:
 	uint32_t m_width;
 	uint32_t m_height;
 	std::vector<uint8_t> m_cells;
 };
+
+__global__ void step_once(const uint8_t *cells, uint32_t width, uint32_t height, uint32_t *pixel_data);

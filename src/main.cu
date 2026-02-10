@@ -3,11 +3,12 @@
 #include <SDL3/SDL_surface.h>
 #include <chrono>
 #include <ctime>
+#include <cuda_device_runtime_api.h>
 #include <sstream>
 #include <string>
 #define SDL_MAIN_USE_CALLBACKS
 
-#include "simulation.h"
+#include "simulation.cuh"
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -47,6 +48,9 @@ class AppState {
 	Grid grid;
 	int cuda_device;
 	TTF_Font *font;
+	bool render_grid;
+	uint32_t *pixbuf;
+	uint32_t *pixbuf_gpu;
 	std::chrono::time_point<std::chrono::high_resolution_clock> last_iteration_start;
 };
 
@@ -62,7 +66,7 @@ int enumerate_cuda_devices()
 		exit(1);
 	}
 
-	printf("Found %d CUDA devices\n", device_count);
+	printf("Found %d CUDA device(s)\n", device_count);
 
 	int chosen_device = 0;
 	for (int device_i = 0; device_i < device_count; device_i++) {
@@ -133,7 +137,12 @@ SDL_AppResult SDL_AppInit(void **raw_appstate, int argc, char **argv)
 		return SDL_APP_FAILURE;
 	}
 
-	AppState *app_state = new AppState{ window, renderer, grid, cuda_device, font };
+	size_t pixbuf_cell_count = static_cast<size_t>(grid.width() * grid.height());
+	uint32_t *pixbuf = new uint32_t[pixbuf_cell_count];
+	uint32_t *pixbuf_gpu;
+	CUDA_CHECK(cudaMalloc(&pixbuf_gpu, pixbuf_cell_count * sizeof(pixbuf[0])));
+	AppState *app_state =
+		new AppState{ window, renderer, grid, cuda_device, font, true, pixbuf, pixbuf_gpu };
 	*raw_appstate = (void *)app_state;
 
 	return SDL_APP_CONTINUE;
@@ -160,18 +169,33 @@ SDL_AppResult SDL_AppIterate(void *raw_appstate)
 		}
 	}
 
+	dim3 dim_grid{ app_state->grid.width(), app_state->grid.height(), 1 };
+	dim3 dim_block{ 16, 16, 1 };
+
+	// clang-format off
+	step_once<<<dim_grid, dim_block>>>(app_state->grid.data(), app_state->grid.width(), app_state->grid.height(), app_state->pixbuf_gpu);
+	// clang-format on
+
+	CUDA_CHECK(cudaMemcpy(app_state->pixbuf, app_state->pixbuf_gpu,
+			      app_state->grid.width() * app_state->grid.height() * sizeof(uint32_t),
+			      cudaMemcpyDeviceToHost));
+
 	// rendering
 	SDL_SetRenderDrawColorFloat(app_state->renderer, 0.1f, 0.3f, 0.2f, SDL_ALPHA_OPAQUE_FLOAT);
 	SDL_RenderClear(app_state->renderer);
 
 	// points
-	SDL_SetRenderDrawColorFloat(app_state->renderer, 1.0, 1.0, 1.0, SDL_ALPHA_OPAQUE_FLOAT);
-	for (uint32_t y = 0; y < app_state->grid.height(); y++) {
-		for (uint32_t x = 0; x < app_state->grid.width(); x++) {
-			if (app_state->grid.is_set(x, y)) {
-				SDL_RenderPoint(app_state->renderer, static_cast<float>(x), static_cast<float>(y));
-			}
-		}
+	if (app_state->render_grid) {
+		SDL_Surface *grid_surface = SDL_CreateSurfaceFrom(static_cast<int>(app_state->grid.width()),
+								  static_cast<int>(app_state->grid.height()),
+								  SDL_PIXELFORMAT_ARGB32, app_state->pixbuf,
+								  app_state->grid.width() * sizeof(uint32_t));
+		SDL_Texture *grid_texture = SDL_CreateTextureFromSurface(app_state->renderer, grid_surface);
+		SDL_FRect dst_rect{ 0, 0, static_cast<float>(app_state->grid.width()),
+				    static_cast<float>(app_state->grid.height()) };
+		SDL_RenderTexture(app_state->renderer, grid_texture, nullptr, &dst_rect);
+		SDL_DestroyTexture(grid_texture);
+		SDL_DestroySurface(grid_surface);
 	}
 
 	// text
@@ -201,7 +225,10 @@ SDL_AppResult SDL_AppEvent(void *raw_appstate, SDL_Event *event)
 			return SDL_APP_SUCCESS;
 		case SDL_SCANCODE_X:
 			app_state->grid.clear();
-                        break;
+			break;
+		case SDL_SCANCODE_R:
+			app_state->render_grid = !app_state->render_grid;
+			break;
 		default:
 			break;
 		}

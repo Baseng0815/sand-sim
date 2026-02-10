@@ -1,4 +1,4 @@
-#include "simulation.h"
+#include "simulation.cuh"
 #include <algorithm>
 #include <assert.h>
 #include <cstdio>
@@ -61,4 +61,31 @@ uint32_t Grid::width() const
 uint32_t Grid::height() const
 {
 	return m_height;
+}
+
+const uint8_t *Grid::data() const
+{
+	return m_cells.data();
+}
+
+__global__ void step_once(const uint8_t *cells, uint32_t width, uint32_t height, uint32_t *pixel_data)
+{
+	size_t idx_x = blockDim.x * blockIdx.x + threadIdx.x;
+	size_t idx_y = blockDim.y * blockIdx.y + threadIdx.y;
+	size_t idx_cell = idx_y * static_cast<size_t>(width) + idx_x;
+
+	if (idx_cell >= static_cast<size_t>(width) * static_cast<size_t>(height)) {
+		return;
+	}
+
+	size_t idx_byte = idx_cell / 8;
+	size_t idx_bit = idx_cell % 8;
+
+	uint8_t cell_value = (cells[idx_byte] >> idx_bit) & 1;
+	if (cell_value > 0) {
+		// ARGB
+		pixel_data[idx_cell] = 0xFFFFFFFF;
+	} else {
+		pixel_data[idx_cell] = 0x00000000;
+	}
 }
