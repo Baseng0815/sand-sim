@@ -14,6 +14,8 @@ class Grid {
 	uint32_t width() const;
 	uint32_t height() const;
 
+        void fill(uint32_t x, uint32_t y, uint32_t radius);
+
         const uint8_t *data() const;
 
     private:

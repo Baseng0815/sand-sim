@@ -63,6 +63,31 @@ uint32_t Grid::height() const
 	return m_height;
 }
 
+void Grid::fill(uint32_t x, uint32_t y, uint32_t radius)
+{
+	for (int32_t y_offset = -radius; y_offset < static_cast<int32_t>(radius); y_offset++) {
+		int32_t y_offsetted = y + y_offset;
+
+		if (y_offsetted < 0 || y_offsetted >= m_height) {
+			continue;
+		}
+
+		for (int32_t x_offset = -radius; x_offset < static_cast<int32_t>(radius); x_offset++) {
+			// we want a nice circle
+			if (x_offset * x_offset + y_offset * y_offset > radius * radius) {
+				continue;
+			}
+
+			int32_t x_offsetted = x + x_offset;
+			if (x_offsetted < 0 || x_offsetted >= m_width) {
+				continue;
+			}
+
+			this->set(static_cast<uint32_t>(x_offsetted), static_cast<uint32_t>(y_offsetted));
+		}
+	}
+}
+
 const uint8_t *Grid::data() const
 {
 	return m_cells.data();

@@ -1,6 +1,7 @@
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_rect.h>
 #include <SDL3/SDL_surface.h>
+#include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <cuda_device_runtime_api.h>
@@ -39,7 +40,7 @@
 		}                                                                                          \
 	} while (0)
 
-const int SAND_DRAW_RADIUS = 16;
+const uint32_t SAND_FILL_RADIUS = 15;
 
 class AppState {
     public:
@@ -141,8 +142,8 @@ SDL_AppResult SDL_AppInit(void **raw_appstate, int argc, char **argv)
 	uint32_t *pixbuf = new uint32_t[pixbuf_cell_count];
 	uint32_t *pixbuf_gpu;
 	CUDA_CHECK(cudaMalloc(&pixbuf_gpu, pixbuf_cell_count * sizeof(pixbuf[0])));
-	AppState *app_state =
-		new AppState{ window, renderer, grid, cuda_device, font, true, pixbuf, pixbuf_gpu };
+
+	AppState *app_state = new AppState{ window, renderer, grid, cuda_device, font, true, pixbuf, pixbuf_gpu };
 	*raw_appstate = (void *)app_state;
 
 	return SDL_APP_CONTINUE;
@@ -161,12 +162,7 @@ SDL_AppResult SDL_AppIterate(void *raw_appstate)
 	float mouse_x, mouse_y;
 	SDL_MouseButtonFlags mouse_flags = SDL_GetMouseState(&mouse_x, &mouse_y);
 	if (mouse_flags & SDL_BUTTON_LEFT) {
-		uint32_t x = static_cast<uint32_t>(mouse_x);
-		uint32_t y = static_cast<uint32_t>(mouse_y);
-
-		if (x < app_state->grid.width() && y < app_state->grid.height()) {
-			app_state->grid.set(x, y);
-		}
+		app_state->grid.fill(static_cast<uint32_t>(mouse_x), static_cast<uint32_t>(mouse_y), SAND_FILL_RADIUS);
 	}
 
 	dim3 dim_grid{ app_state->grid.width(), app_state->grid.height(), 1 };
