@@ -5,6 +5,7 @@
 #include <chrono>
 #include <ctime>
 #include <cuda_device_runtime_api.h>
+#include <iostream>
 #include <sstream>
 #include <string>
 #define SDL_MAIN_USE_CALLBACKS
@@ -31,16 +32,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-#define CUDA_CHECK(expr_to_check)                                                                          \
-	do {                                                                                               \
-		cudaError_t result = expr_to_check;                                                        \
-		if (result != cudaSuccess) {                                                               \
-			fprintf(stderr, "CUDA Runtime Error: %s:%i:%d = %s\n", __FILE__, __LINE__, result, \
-				cudaGetErrorString(result));                                               \
-		}                                                                                          \
-	} while (0)
-
-const uint32_t SAND_FILL_RADIUS = 15;
+const uint32_t TILE_FILL_RADIUS = 7;
 
 class AppState {
     public:
@@ -58,6 +50,7 @@ class AppState {
 };
 
 void render_text(AppState *app_state, std::string &string, int pos_x, int pos_y);
+void step_simulation(AppState *app_state);
 
 int enumerate_cuda_devices()
 {
@@ -150,6 +143,8 @@ SDL_AppResult SDL_AppInit(void **raw_appstate, int argc, char **argv)
 	CUDA_CHECK(cudaMalloc(&cellbuf_gpu_old, cell_count * sizeof(uint8_t)));
 	CUDA_CHECK(cudaMalloc(&cellbuf_gpu_new, cell_count * sizeof(uint8_t)));
 
+	initialize_transition_tables();
+
 	AppState *app_state = new AppState{ window, renderer, grid,	  cuda_device,	   font,
 					    true,   pixbuf,   pixbuf_gpu, cellbuf_gpu_old, cellbuf_gpu_new };
 	*raw_appstate = (void *)app_state;
@@ -169,28 +164,17 @@ SDL_AppResult SDL_AppIterate(void *raw_appstate)
 	// event polling
 	float mouse_x, mouse_y;
 	SDL_MouseButtonFlags mouse_flags = SDL_GetMouseState(&mouse_x, &mouse_y);
-	if (mouse_flags & SDL_BUTTON_LEFT) {
-		app_state->grid.fill(static_cast<uint32_t>(mouse_x), static_cast<uint32_t>(mouse_y), 1, SAND_FILL_RADIUS);
+	if (mouse_flags & SDL_BUTTON_MASK(SDL_BUTTON_LEFT)) {
+		app_state->grid.fill(static_cast<uint32_t>(mouse_x), static_cast<uint32_t>(mouse_y), Tile::SAND,
+				     TILE_FILL_RADIUS);
 	}
 
-	dim3 dim_block{ 16, 16, 1 };
-	dim3 dim_grid{ app_state->grid.width() / dim_block.x, app_state->grid.height() / dim_block.y, 1 };
+	if (mouse_flags & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT)) {
+		app_state->grid.fill(static_cast<uint32_t>(mouse_x), static_cast<uint32_t>(mouse_y), Tile::WALL,
+				     TILE_FILL_RADIUS);
+	}
 
-	CUDA_CHECK(cudaMemcpy(app_state->cellbuf_gpu_old, app_state->grid.data(),
-			      app_state->grid.width() * app_state->grid.height() * sizeof(uint8_t),
-			      cudaMemcpyHostToDevice));
-
-	// clang-format off
-	step_simulation<<<dim_grid, dim_block>>>(app_state->cellbuf_gpu_new, app_state->cellbuf_gpu_old, app_state->grid.width(), app_state->grid.height());
-	render_grid<<<dim_grid, dim_block>>>(app_state->cellbuf_gpu_new, app_state->grid.width(), app_state->grid.height(), app_state->pixbuf_gpu);
-	// clang-format on
-
-	CUDA_CHECK(cudaMemcpy(app_state->grid.data(), app_state->cellbuf_gpu_new,
-			      app_state->grid.width() * app_state->grid.height() * sizeof(uint8_t),
-			      cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(app_state->pixbuf, app_state->pixbuf_gpu,
-			      app_state->grid.width() * app_state->grid.height() * sizeof(uint32_t),
-			      cudaMemcpyDeviceToHost));
+	step_simulation(app_state);
 
 	// rendering
 	SDL_SetRenderDrawColorFloat(app_state->renderer, 0.1f, 0.3f, 0.2f, SDL_ALPHA_OPAQUE_FLOAT);
@@ -286,4 +270,26 @@ void render_text(AppState *app_state, std::string &string, int pos_x, int pos_y)
 
 	SDL_DestroyTexture(texture);
 	SDL_DestroySurface(surface);
+}
+
+void step_simulation(AppState *app_state)
+{
+	dim3 dim_block{ 16, 16, 1 };
+	dim3 dim_grid{ app_state->grid.width() / dim_block.x, app_state->grid.height() / dim_block.y, 1 };
+
+	CUDA_CHECK(cudaMemcpy(app_state->cellbuf_gpu_old, app_state->grid.data(),
+			      app_state->grid.width() * app_state->grid.height() * sizeof(uint8_t),
+			      cudaMemcpyHostToDevice));
+
+	// clang-format off
+	step_simulation<<<dim_grid, dim_block>>>(app_state->cellbuf_gpu_new, app_state->cellbuf_gpu_old, app_state->grid.width(), app_state->grid.height());
+	render_grid<<<dim_grid, dim_block>>>(app_state->cellbuf_gpu_new, app_state->grid.width(), app_state->grid.height(), app_state->pixbuf_gpu);
+	// clang-format on
+
+	CUDA_CHECK(cudaMemcpy(app_state->grid.data(), app_state->cellbuf_gpu_new,
+			      app_state->grid.width() * app_state->grid.height() * sizeof(uint8_t),
+			      cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(app_state->pixbuf, app_state->pixbuf_gpu,
+			      app_state->grid.width() * app_state->grid.height() * sizeof(uint32_t),
+			      cudaMemcpyDeviceToHost));
 }

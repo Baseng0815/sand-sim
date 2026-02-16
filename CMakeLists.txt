@@ -4,7 +4,7 @@ project(sand-sim CXX CUDA)
 set(CMAKE_CXX_STANDARD 17)
 
 # Collect all sources and headers from src/
-file(GLOB_RECURSE SOURCES "src/main.cu" "src/simulation.cu")
+file(GLOB_RECURSE SOURCES "src/main.cu" "src/simulation.cu" "src/transition_table.cpp")
 # file(GLOB_RECURSE HEADERS "")
 
 add_executable(sand-sim ${SOURCES} ${HEADERS})
