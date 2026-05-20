@@ -43,7 +43,8 @@ class Grid {
 void initialize_transition_tables();
 
 __global__ void render_grid(const uint8_t *cells, uint32_t width, uint32_t height, uint32_t *pixel_data);
-__global__ void step_simulation(uint8_t *cells_new, const uint8_t *cells, uint32_t width, uint32_t height);
+__global__ void step_simulation(uint8_t *cells_new, const uint8_t *cells, uint32_t width, uint32_t height,
+				 bool priority_left);
 
 __device__ uint8_t get_cell_value_checked(const uint8_t *cells, uint32_t width, uint32_t height, size_t x, size_t y);
 __device__ void set_cell_value_checked(uint8_t *cells, uint32_t width, uint32_t height, size_t x, size_t y,

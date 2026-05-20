@@ -121,7 +121,8 @@ __global__ void render_grid(const uint8_t *cells, uint32_t width, uint32_t heigh
 	}
 }
 
-__global__ void step_simulation(uint8_t *cells_new, const uint8_t *cells, uint32_t width, uint32_t height)
+__global__ void step_simulation(uint8_t *cells_new, const uint8_t *cells, uint32_t width, uint32_t height,
+				 bool priority_left)
 {
 	size_t idx_x = blockDim.x * blockIdx.x + threadIdx.x;
 	size_t idx_y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -147,8 +148,16 @@ __global__ void step_simulation(uint8_t *cells_new, const uint8_t *cells, uint32
 		neighborhood_value |= cell_value << coord_offset_idx;
 	}
 
-	// uint8_t result = TRANSITION_TABLE_DEVICE_LEFT[neighborhood_value];
-	uint8_t result = TRANSITION_TABLE_DEVICE_LEFT[neighborhood_value];
+	if (idx_x == 0) {
+		neighborhood_value |= 1u << 4;
+	}
+	if (idx_x == static_cast<size_t>(width) - 1) {
+		neighborhood_value |= 1u << 6;
+	}
+
+	const uint8_t *transition_table =
+		priority_left ? TRANSITION_TABLE_DEVICE_LEFT : TRANSITION_TABLE_DEVICE_RIGHT;
+	uint8_t result = transition_table[neighborhood_value];
 	set_cell_value_checked(cells_new, width, height, idx_x, idx_y, result);
 }
 

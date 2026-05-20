@@ -30,7 +30,11 @@
         ];
 
         buildInputs = with pkgs; [
-          linuxPackages.nvidiaPackages.beta
+          # NOTE: do NOT add linuxPackages.nvidiaPackages.* here. The userspace
+          # libcuda.so must match the running kernel module; bundling a driver
+          # package causes "CUDA driver/library version mismatch". The matching
+          # libcuda.so is provided by the host at /run/opengl-driver/lib (see
+          # shellHook below).
           sdl3
           sdl3-ttf
           harfbuzz
@@ -58,7 +62,10 @@
           # export PATH=${pkgs.gcc13}/bin:$PATH
         shellHook = ''
           export CUDA_PATH=${pkgs.cudaPackages.cudatoolkit}
-          export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
+          # /run/opengl-driver/lib first: the kernel-matched libcuda.so / NVML
+          # live there and must take precedence over any CUDA stub libs.
+          export LD_LIBRARY_PATH="/run/opengl-driver/lib:${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
+          zsh
           echo "CUDA dev shell ready"
         '';
       };

@@ -162,8 +162,11 @@ SDL_AppResult SDL_AppIterate(void *raw_appstate)
 	app_state->last_iteration_start = curr_iter_start;
 
 	// event polling
+	float window_x, window_y;
+	SDL_MouseButtonFlags mouse_flags = SDL_GetMouseState(&window_x, &window_y);
+
 	float mouse_x, mouse_y;
-	SDL_MouseButtonFlags mouse_flags = SDL_GetMouseState(&mouse_x, &mouse_y);
+	SDL_RenderCoordinatesFromWindow(app_state->renderer, window_x, window_y, &mouse_x, &mouse_y);
 	if (mouse_flags & SDL_BUTTON_MASK(SDL_BUTTON_LEFT)) {
 		app_state->grid.fill(static_cast<uint32_t>(mouse_x), static_cast<uint32_t>(mouse_y), Tile::SAND,
 				     TILE_FILL_RADIUS);
@@ -274,6 +277,9 @@ void render_text(AppState *app_state, std::string &string, int pos_x, int pos_y)
 
 void step_simulation(AppState *app_state)
 {
+	static uint64_t step_count = 0;
+	bool priority_left = (step_count++ % 2) == 0;
+
 	dim3 dim_block{ 16, 16, 1 };
 	dim3 dim_grid{ app_state->grid.width() / dim_block.x, app_state->grid.height() / dim_block.y, 1 };
 
@@ -282,7 +288,7 @@ void step_simulation(AppState *app_state)
 			      cudaMemcpyHostToDevice));
 
 	// clang-format off
-	step_simulation<<<dim_grid, dim_block>>>(app_state->cellbuf_gpu_new, app_state->cellbuf_gpu_old, app_state->grid.width(), app_state->grid.height());
+	step_simulation<<<dim_grid, dim_block>>>(app_state->cellbuf_gpu_new, app_state->cellbuf_gpu_old, app_state->grid.width(), app_state->grid.height(), priority_left);
 	render_grid<<<dim_grid, dim_block>>>(app_state->cellbuf_gpu_new, app_state->grid.width(), app_state->grid.height(), app_state->pixbuf_gpu);
 	// clang-format on
 
